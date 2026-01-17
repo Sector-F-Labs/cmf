@@ -52,11 +52,13 @@
             <main>
                 <h1>Conversational Markdown Format</h1>
 
-                <p><strong>Store conversations as plain text files.</strong></p>
+                <p><strong>A proposed standard for storing conversations as plain text.</strong></p>
+
+                <p>CMF (Conversational Markdown Format) defines a simple convention for representing conversations in markdown. Any chat application that supports the format can read and write CMF files, making conversations portable across tools and vendors.</p>
 
                 <p>Every conversation you have is valuable, whether with an LLM or with other people. It contains decisions, explanations, code, and context that you may need again. But most tools lock these conversations into proprietary formats, vendor-specific exports, or bloated JSON that nobody wants to read.</p>
 
-                <p>CMF stores conversations as valid CommonMark markdown. Open a CMF file in any text editor, markdown viewer, or note-taking app and it just works. Search with grep, diff with git, edit by hand. No special tools required.</p>
+                <p>CMF files are valid markdown. Open them in any text editor, markdown viewer, or note-taking app and they just work. Search with grep, diff with git, edit by hand. No special tools required.</p>
 
                 <h2>Why Plain Text?</h2>
                 <p>Plain text is the universal interface. CMF files work with grep, sed, awk, and every other Unix tool. Track changes with git. Search across hundreds of conversations with ripgrep. Process them programmatically, feed them to other models, or move them between clients and agents. Your conversations stay portable across tools, vendors, and time.</p>
@@ -108,7 +110,10 @@ You're welcome.</code></pre>
                     <li>Files use <code>.cmf</code> extension &mdash; CMF is valid CommonMark</li>
                 </ul>
 
-                <h2>CLI</h2>
+                <h2>Reference Implementation</h2>
+                <p>The CLI and Rust library below are reference implementations. Use them directly, or build your own parser&mdash;the format is simple enough to implement in an afternoon.</p>
+
+                <h3>CLI</h3>
                 <pre><code># Install
 git clone https://github.com/Sector-F-Labs/conversational-markdown-format.git
 cargo install --path conversational-markdown-format
@@ -133,7 +138,7 @@ cmf to-openai-responses conversation.cmf</code></pre>
                     <li><strong>Escaping via indent</strong> &mdash; Need a blockquote in assistant content? Just indent it one space.</li>
                 </ul>
 
-                <h2>Library</h2>
+                <h3>Rust Library</h3>
                 <pre><code>use cmf::Document;
 
 let doc = Document::parse(input);
