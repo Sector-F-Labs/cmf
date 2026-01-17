@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CMF - Conversational Markdown Format</title>
+  <style>
+    :root {
+      --bg: #fafafa;
+      --fg: #1a1a1a;
+      --muted: #666;
+      --accent: #0066cc;
+      --code-bg: #f0f0f0;
+      --border: #ddd;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1a1a1a;
+        --fg: #e0e0e0;
+        --muted: #999;
+        --accent: #6ab0f3;
+        --code-bg: #2d2d2d;
+        --border: #444;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.6;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 2rem 1rem;
+      background: var(--bg);
+      color: var(--fg);
+    }
+    h1 { margin-bottom: 0.25rem; }
+    .tagline { color: var(--muted); margin-top: 0; }
+    h2 { margin-top: 2.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+    a { color: var(--accent); }
+    pre {
+      background: var(--code-bg);
+      padding: 1rem;
+      overflow-x: auto;
+      border-radius: 4px;
+      font-size: 0.9rem;
+    }
+    code {
+      background: var(--code-bg);
+      padding: 0.15rem 0.3rem;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    pre code { background: none; padding: 0; }
+    .example { display: grid; gap: 1rem; }
+    @media (min-width: 600px) {
+      .example { grid-template-columns: 1fr 1fr; }
+    }
+    .example > div > p { margin-top: 0; font-weight: 600; font-size: 0.85rem; color: var(--muted); }
+    ul { padding-left: 1.5rem; }
+    footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <h1>CMF</h1>
+  <p class="tagline">Conversational Markdown Format</p>
+
+  <p>A markdown-based interchange format for LLM conversations. Human-readable, machine-parseable, tool-friendly.</p>
+
+  <h2>Format</h2>
+  <p>User messages are blockquotes (<code>&gt;</code>). Everything else is assistant content.</p>
+
+  <div class="example">
+    <div>
+      <p>CMF</p>
+      <pre><code>&gt; What is 2+2?
+The answer is 4.
+
+&gt; Thanks!
+You're welcome.</code></pre>
+    </div>
+    <div>
+      <p>JSON (OpenAI Chat)</p>
+      <pre><code>[
+  {"role": "user", "content": "What is 2+2?"},
+  {"role": "assistant", "content": "The answer is 4."},
+  {"role": "user", "content": "Thanks!"},
+  {"role": "assistant", "content": "You're welcome."}
+]</code></pre>
+    </div>
+  </div>
+
+  <h2>Rules</h2>
+  <ul>
+    <li>User lines start with <code>&gt;</code> in column 1</li>
+    <li>Multi-user chats use <code>&gt; @username:</code> prefix</li>
+    <li>Assistant content is everything between user blocks</li>
+    <li>Indent blockquotes (<code>&nbsp;&gt; text</code>) to escape them in assistant content</li>
+    <li>Files use <code>.cmf</code> extension &mdash; CMF is valid CommonMark</li>
+  </ul>
+
+  <h2>CLI</h2>
+  <pre><code># Install
+cargo install cmf
+
+# Detect CMF and count turns
+cmf detect conversation.cmf
+
+# Check conformance (silent on success)
+cmf check conversation.cmf
+
+# Convert to OpenAI Chat Completions format
+cmf to-openai-chat conversation.cmf
+
+# Convert to OpenAI Responses API format
+cmf to-openai-responses conversation.cmf</code></pre>
+
+  <h2>Design Principles</h2>
+  <ul>
+    <li><strong>Human-readable</strong> &mdash; Valid markdown, renders in any viewer</li>
+    <li><strong>Tool-friendly</strong> &mdash; Works with grep, diff, pipes, VCS</li>
+    <li><strong>Minimal</strong> &mdash; No required metadata, no sidecars</li>
+    <li><strong>Unix philosophy</strong> &mdash; Text as universal interface</li>
+  </ul>
+
+  <h2>Library</h2>
+  <pre><code>use cmf::Document;
+
+let doc = Document::parse(input);
+for turn in &amp;doc.turns {
+    println!("User: {}", turn.user.content);
+    println!("Assistant: {}", turn.assistant);
+}
+
+// Convert to OpenAI formats
+let messages = doc.to_openai_chat();
+let responses = doc.to_openai_responses();</code></pre>
+
+  <h2>Links</h2>
+  <ul>
+    <li><a href="https://github.com/divanvisagie/conversational-markdown-format">GitHub</a></li>
+    <li><a href="https://crates.io/crates/cmf">crates.io</a></li>
+  </ul>
+
+  <footer>
+    <p>BSD-3-Clause &middot; <a href="https://github.com/divanvisagie/conversational-markdown-format">Source</a></p>
+  </footer>
+</body>
+</html>

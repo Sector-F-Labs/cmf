@@ -1,0 +1,22 @@
+[package]
+name = "cmf"
+version = "0.1.0"
+edition = "2021"
+description = "Conversational Markdown Format - parse and convert LLM conversations"
+license = "BSD-3-Clause"
+repository = "https://github.com/divanvisagie/conversational-markdown-format"
+keywords = ["markdown", "llm", "conversation", "chat", "openai"]
+categories = ["command-line-utilities", "parsing", "text-processing"]
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lib]
+name = "cmf"
+path = "src/lib.rs"
+
+[[bin]]
+name = "cmf"
+path = "src/main.rs"
