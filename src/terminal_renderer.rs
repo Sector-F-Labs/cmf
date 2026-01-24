@@ -425,6 +425,9 @@ impl MarkdownRenderer {
         let mut list_depth = 0;
         let mut list_renderer: Option<ListRenderer> = None;
         let mut in_list_item = false;
+        let mut in_heading = false;
+        let mut heading_level = 0u32;
+        let mut heading_buffer = String::new();
 
         for event in parser {
             match event {
@@ -433,9 +436,19 @@ impl MarkdownRenderer {
                         Tag::Paragraph => {
                             context.ensure_blank_line();
                         }
-                        Tag::Heading(_level, ..) => {
+                        Tag::Heading(level, ..) => {
                             context.ensure_newline();
                             context.pending_newlines = 0;
+                            in_heading = true;
+                            heading_level = match level {
+                                pulldown_cmark::HeadingLevel::H1 => 1,
+                                pulldown_cmark::HeadingLevel::H2 => 2,
+                                pulldown_cmark::HeadingLevel::H3 => 3,
+                                pulldown_cmark::HeadingLevel::H4 => 4,
+                                pulldown_cmark::HeadingLevel::H5 => 5,
+                                pulldown_cmark::HeadingLevel::H6 => 6,
+                            };
+                            heading_buffer.clear();
                         }
                         Tag::List(ordered) => {
                             list_depth += 1;
@@ -492,10 +505,13 @@ impl MarkdownRenderer {
                             context.push_newline();
                             context.pending_newlines = 1;
                         }
-                        Tag::Heading(_level, ..) => {
+                        Tag::Heading(..) => {
+                            let formatted = self.format_heading(&heading_buffer, heading_level);
+                            context.push_str(&formatted);
                             context.push_newline();
                             context.push_newline();
                             context.pending_newlines = 2;
+                            in_heading = false;
                         }
                         Tag::List(_) => {
                             list_depth -= 1;
@@ -560,7 +576,9 @@ impl MarkdownRenderer {
                     }
                 }
                 Event::Text(text) => {
-                    if let Some(ref mut renderer) = code_renderer {
+                    if in_heading {
+                        heading_buffer.push_str(&text);
+                    } else if let Some(ref mut renderer) = code_renderer {
                         renderer.handle_text(&text, &mut context);
                     } else if let Some(ref mut renderer) = table_renderer {
                         renderer.handle_text(&text, &mut context);
@@ -644,6 +662,42 @@ impl MarkdownRenderer {
 
         // Reverse video: invert colors to respect terminal theme
         code.reversed().to_string()
+    }
+
+    fn format_heading(&self, text: &str, level: u32) -> String {
+        match level {
+            1 => {
+                // H1: Bold with decorative lines top and bottom
+                let border = "─".repeat(text.len() + 4);
+                let bold_text = if self.use_colors {
+                    text.bold().to_string()
+                } else {
+                    text.to_string()
+                };
+                format!("{}\n {} \n{}", border, bold_text, border)
+            }
+            2 => {
+                // H2: Bold with decorative lines on sides
+                let bold_text = if self.use_colors {
+                    text.bold().to_string()
+                } else {
+                    text.to_string()
+                };
+                format!("─── {} ───", bold_text)
+            }
+            3 => {
+                // H3: Just bold
+                if self.use_colors {
+                    text.bold().to_string()
+                } else {
+                    text.to_string()
+                }
+            }
+            _ => {
+                // H4+: Standard text
+                text.to_string()
+            }
+        }
     }
 
     /// Public API for rendering tables (used in tests)
