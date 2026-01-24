@@ -679,16 +679,21 @@ impl MarkdownRenderer {
                 format!("─── {} ───", bold_text)
             }
             3 => {
-                // H3: Just bold
+                // H3: Bold with dashes on sides
+                let bold_text = if self.use_colors {
+                    text.bold().to_string()
+                } else {
+                    text.to_string()
+                };
+                format!("- {} -", bold_text)
+            }
+            _ => {
+                // H4+: Just bold
                 if self.use_colors {
                     text.bold().to_string()
                 } else {
                     text.to_string()
                 }
-            }
-            _ => {
-                // H4+: Standard text
-                text.to_string()
             }
         }
     }
