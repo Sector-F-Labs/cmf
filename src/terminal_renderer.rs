@@ -81,36 +81,47 @@ pub trait ElementRenderer {
     fn end(&mut self, context: &mut RenderContext) -> Option<String>;
 }
 
-/// Renders code blocks with background highlighting
+/// Renders code blocks with box-drawing borders
 pub struct CodeBlockRenderer {
     buffer: String,
-    use_colors: bool,
 }
 
 impl CodeBlockRenderer {
-    fn new(use_colors: bool) -> Self {
+    fn new(_use_colors: bool) -> Self {
         Self {
             buffer: String::new(),
-            use_colors,
         }
     }
 
     fn render_code_block(&self, code: &str) -> String {
-        if !self.use_colors {
-            return code.to_string();
+        let lines: Vec<&str> = code.lines().collect();
+        if lines.is_empty() {
+            return String::new();
         }
 
-        let lines: Vec<&str> = code.lines().collect();
         let max_len = lines.iter().map(|l| l.len()).max().unwrap_or(0);
+        let mut output = String::new();
 
-        lines
-            .iter()
-            .map(|line| {
-                let padded = format!("{:<width$}", line, width = max_len);
-                padded.on_bright_white().black().to_string()
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
+        // Top border
+        output.push('┌');
+        output.push_str(&"─".repeat(max_len + 2));
+        output.push_str("┐\n");
+
+        // Code lines
+        for line in lines {
+            output.push('│');
+            output.push(' ');
+            output.push_str(&format!("{:<width$}", line, width = max_len));
+            output.push(' ');
+            output.push_str("│\n");
+        }
+
+        // Bottom border
+        output.push('└');
+        output.push_str(&"─".repeat(max_len + 2));
+        output.push('┘');
+
+        output
     }
 }
 
