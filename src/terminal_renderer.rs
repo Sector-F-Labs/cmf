@@ -605,7 +605,7 @@ impl MarkdownRenderer {
                     // Skip HTML tags
                 }
                 Event::Code(code) => {
-                    let rendered = self.render_text(&code, &context.formatting_stack);
+                    let rendered = self.render_inline_code(&code);
                     context.push_str(&rendered);
                 }
                 Event::TaskListMarker(checked) => {
@@ -635,6 +635,15 @@ impl MarkdownRenderer {
         }
 
         result
+    }
+
+    fn render_inline_code(&self, code: &str) -> String {
+        if !self.use_colors {
+            return code.to_string();
+        }
+
+        // Invert colors: bright white background with black text
+        code.on_bright_white().black().to_string()
     }
 
     /// Public API for rendering tables (used in tests)
