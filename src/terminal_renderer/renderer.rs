@@ -1,398 +1,15 @@
-//! Terminal markdown renderer with ANSI color codes and box-drawing characters.
-//!
-//! Renders markdown with terminal formatting:
-//! - Bold, italic text
-//! - Headers with colors
-//! - Inline code with background
-//! - Links with URL display
-//! - Lists with bullets/numbers
-//! - Code blocks with background
-//! - Tables with box-drawing characters
-//! - Blockquotes with vertical bars
+//! Main markdown renderer orchestrating all element renderers
 
 use atty;
-use colored::*;
 use pulldown_cmark::{Event, Parser, Tag, Options};
-use std::collections::VecDeque;
+
+use crate::terminal_renderer::context::{RenderContext, FormattingState};
+use crate::terminal_renderer::element_renderer::ElementRenderer;
+use crate::terminal_renderer::formatters::{format_text, format_inline_code, format_heading};
+use crate::terminal_renderer::renderers::{CodeBlockRenderer, TableRenderer, BlockquoteRenderer, ListRenderer};
 
 pub struct MarkdownRenderer {
     use_colors: bool,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-enum FormattingState {
-    Bold,
-    Italic,
-    Link,
-}
-
-/// Shared context for rendering markdown elements with state tracking
-pub struct RenderContext {
-    output: String,
-    formatting_stack: VecDeque<FormattingState>,
-    pending_newlines: usize,
-    #[allow(dead_code)]
-    use_colors: bool,
-}
-
-impl RenderContext {
-    fn new(use_colors: bool) -> Self {
-        Self {
-            output: String::new(),
-            formatting_stack: VecDeque::new(),
-            pending_newlines: 0,
-            use_colors,
-        }
-    }
-
-    fn push_str(&mut self, s: &str) {
-        self.output.push_str(s);
-        self.pending_newlines = 0;
-    }
-
-    fn push_newline(&mut self) {
-        self.output.push('\n');
-        self.pending_newlines += 1;
-    }
-
-    fn ensure_newline(&mut self) {
-        if !self.output.is_empty() && !self.output.ends_with('\n') {
-            self.push_newline();
-        }
-    }
-
-    fn ensure_blank_line(&mut self) {
-        if !self.output.is_empty() && !self.output.ends_with("\n\n") && self.pending_newlines < 2 {
-            self.push_newline();
-        }
-    }
-
-    fn into_output(self) -> String {
-        self.output.trim_end().to_string() + "\n"
-    }
-}
-
-/// Trait for rendering specific markdown element types
-pub trait ElementRenderer {
-    fn start(&mut self, context: &mut RenderContext);
-    fn handle_text(&mut self, text: &str, context: &mut RenderContext);
-    fn handle_soft_break(&mut self, context: &mut RenderContext);
-    fn handle_hard_break(&mut self, context: &mut RenderContext);
-    fn end(&mut self, context: &mut RenderContext) -> Option<String>;
-}
-
-/// Renders code blocks with box-drawing borders
-pub struct CodeBlockRenderer {
-    buffer: String,
-}
-
-impl CodeBlockRenderer {
-    fn new(_use_colors: bool) -> Self {
-        Self {
-            buffer: String::new(),
-        }
-    }
-
-    fn render_code_block(&self, code: &str) -> String {
-        let lines: Vec<&str> = code.lines().collect();
-        if lines.is_empty() {
-            return String::new();
-        }
-
-        let mut output = String::new();
-
-        // Indent each line by 4 spaces
-        for line in lines {
-            output.push_str("    ");
-            output.push_str(line);
-            output.push('\n');
-        }
-
-        // Remove trailing newline (will be added by caller)
-        if output.ends_with('\n') {
-            output.pop();
-        }
-
-        output
-    }
-}
-
-impl ElementRenderer for CodeBlockRenderer {
-    fn start(&mut self, _: &mut RenderContext) {
-        self.buffer.clear();
-    }
-
-    fn handle_text(&mut self, text: &str, _: &mut RenderContext) {
-        self.buffer.push_str(text);
-    }
-
-    fn handle_soft_break(&mut self, _: &mut RenderContext) {
-        self.buffer.push('\n');
-    }
-
-    fn handle_hard_break(&mut self, _: &mut RenderContext) {
-        self.buffer.push('\n');
-    }
-
-    fn end(&mut self, _context: &mut RenderContext) -> Option<String> {
-        Some(self.render_code_block(&self.buffer))
-    }
-}
-
-/// Renders markdown tables with box-drawing characters
-pub struct TableRenderer {
-    rows: Vec<Vec<String>>,
-    current_row: Vec<String>,
-    current_cell: String,
-}
-
-impl TableRenderer {
-    fn new() -> Self {
-        Self {
-            rows: Vec::new(),
-            current_row: Vec::new(),
-            current_cell: String::new(),
-        }
-    }
-
-    fn add_cell(&mut self, cell: String) {
-        self.current_row.push(cell);
-    }
-
-    fn finish_row(&mut self) {
-        if !self.current_row.is_empty() {
-            self.rows.push(self.current_row.clone());
-            self.current_row.clear();
-        }
-    }
-
-    fn render_table(&self) -> String {
-        if self.rows.is_empty() {
-            return String::new();
-        }
-
-        let num_cols = self.rows.iter().map(|r| r.len()).max().unwrap_or(0);
-        let mut col_widths = vec![0; num_cols];
-
-        for row in &self.rows {
-            for (i, cell) in row.iter().enumerate() {
-                col_widths[i] = col_widths[i].max(cell.len());
-            }
-        }
-
-        let mut output = String::new();
-
-        // Top border
-        output.push('┌');
-        for (i, width) in col_widths.iter().enumerate() {
-            output.push_str(&"─".repeat(width + 2));
-            if i < col_widths.len() - 1 {
-                output.push('┬');
-            }
-        }
-        output.push_str("┐\n");
-
-        // Rows
-        for (row_idx, row) in self.rows.iter().enumerate() {
-            output.push('│');
-            for (col_idx, cell) in row.iter().enumerate() {
-                output.push(' ');
-                output.push_str(&format!("{:<width$}", cell, width = col_widths[col_idx]));
-                output.push(' ');
-                output.push('│');
-            }
-            output.push('\n');
-
-            // Add separator line between rows (or after header)
-            if row_idx < self.rows.len() - 1 {
-                output.push('├');
-                for (i, width) in col_widths.iter().enumerate() {
-                    output.push_str(&"─".repeat(width + 2));
-                    if i < col_widths.len() - 1 {
-                        output.push('┼');
-                    }
-                }
-                output.push_str("┤\n");
-            }
-        }
-
-        // Bottom border
-        output.push('└');
-        for (i, width) in col_widths.iter().enumerate() {
-            output.push_str(&"─".repeat(width + 2));
-            if i < col_widths.len() - 1 {
-                output.push('┴');
-            }
-        }
-        output.push_str("┘");
-
-        output
-    }
-}
-
-impl ElementRenderer for TableRenderer {
-    fn start(&mut self, _: &mut RenderContext) {
-        self.rows.clear();
-        self.current_row.clear();
-        self.current_cell.clear();
-    }
-
-    fn handle_text(&mut self, text: &str, _: &mut RenderContext) {
-        self.current_cell.push_str(text);
-    }
-
-    fn handle_soft_break(&mut self, _: &mut RenderContext) {
-        self.current_cell.push(' ');
-    }
-
-    fn handle_hard_break(&mut self, _: &mut RenderContext) {
-        self.current_cell.push('\n');
-    }
-
-    fn end(&mut self, _: &mut RenderContext) -> Option<String> {
-        Some(self.render_table())
-    }
-}
-
-// Note: TableCell and TableRow handling is done in the renderer's table-specific logic
-impl TableRenderer {
-    fn start_cell(&mut self) {
-        self.current_cell.clear();
-    }
-
-    fn end_cell(&mut self) {
-        self.add_cell(self.current_cell.clone());
-        self.current_cell.clear();
-    }
-
-    fn start_row(&mut self) {
-        self.current_row.clear();
-    }
-
-    fn end_row(&mut self) {
-        self.finish_row();
-    }
-}
-
-/// Renders blockquotes with vertical bar prefix
-pub struct BlockquoteRenderer {
-    lines: Vec<String>,
-    current_line: String,
-}
-
-impl BlockquoteRenderer {
-    fn new() -> Self {
-        Self {
-            lines: Vec::new(),
-            current_line: String::new(),
-        }
-    }
-
-    fn add_prefix_to_lines(text: &str) -> String {
-        text.lines()
-            .map(|line| format!("▌ {}", line))
-            .collect::<Vec<_>>()
-            .join("\n")
-    }
-}
-
-impl ElementRenderer for BlockquoteRenderer {
-    fn start(&mut self, _: &mut RenderContext) {
-        self.lines.clear();
-        self.current_line.clear();
-    }
-
-    fn handle_text(&mut self, text: &str, _: &mut RenderContext) {
-        self.current_line.push_str(text);
-    }
-
-    fn handle_soft_break(&mut self, _: &mut RenderContext) {
-        self.lines.push(self.current_line.clone());
-        self.current_line.clear();
-    }
-
-    fn handle_hard_break(&mut self, _: &mut RenderContext) {
-        self.lines.push(self.current_line.clone());
-        self.current_line.clear();
-    }
-
-    fn end(&mut self, _: &mut RenderContext) -> Option<String> {
-        if !self.current_line.is_empty() {
-            self.lines.push(self.current_line.clone());
-        }
-
-        let full_text = self.lines.join("\n");
-        Some(Self::add_prefix_to_lines(&full_text))
-    }
-}
-
-/// Renders lists with bullets or numbers
-pub struct ListRenderer {
-    #[allow(dead_code)]
-    depth: usize,
-    is_ordered: bool,
-    item_indices: Vec<usize>,
-    in_item: bool,
-    buffer: String,
-}
-
-impl ListRenderer {
-    fn new(ordered: bool, depth: usize) -> Self {
-        Self {
-            depth,
-            is_ordered: ordered,
-            item_indices: if ordered { vec![0] } else { Vec::new() },
-            in_item: false,
-            buffer: String::new(),
-        }
-    }
-
-    fn start_item(&mut self, output: &mut String, depth: usize) {
-        self.in_item = true;
-
-        // Add indentation
-        for _ in 0..(depth - 1) {
-            output.push_str("  ");
-        }
-
-        // Add bullet or number
-        if self.is_ordered {
-            if let Some(idx) = self.item_indices.last_mut() {
-                *idx += 1;
-                output.push_str(&format!("{}. ", idx));
-            }
-        } else {
-            output.push_str("• ");
-        }
-    }
-
-    #[allow(dead_code)]
-    fn end_item(&mut self) {
-        self.in_item = false;
-    }
-}
-
-impl ElementRenderer for ListRenderer {
-    fn start(&mut self, _: &mut RenderContext) {
-        self.buffer.clear();
-    }
-
-    fn handle_text(&mut self, text: &str, _: &mut RenderContext) {
-        self.buffer.push_str(text);
-    }
-
-    fn handle_soft_break(&mut self, _: &mut RenderContext) {
-        self.buffer.push(' ');
-    }
-
-    fn handle_hard_break(&mut self, _: &mut RenderContext) {
-        self.buffer.push('\n');
-    }
-
-    fn end(&mut self, _: &mut RenderContext) -> Option<String> {
-        // ListRenderer is handled differently in main render loop
-        None
-    }
 }
 
 impl MarkdownRenderer {
@@ -454,7 +71,7 @@ impl MarkdownRenderer {
                         }
                         Tag::CodeBlock(_) => {
                             context.ensure_blank_line();
-                            code_renderer = Some(CodeBlockRenderer::new(self.use_colors));
+                            code_renderer = Some(CodeBlockRenderer::new());
                             if let Some(ref mut renderer) = code_renderer {
                                 renderer.start(&mut context);
                             }
@@ -499,7 +116,7 @@ impl MarkdownRenderer {
                             context.pending_newlines = 1;
                         }
                         Tag::Heading(..) => {
-                            let formatted = self.format_heading(&heading_buffer, heading_level);
+                            let formatted = format_heading(&heading_buffer, heading_level, self.use_colors);
                             context.push_str(&formatted);
                             context.push_newline();
                             context.push_newline();
@@ -578,7 +195,7 @@ impl MarkdownRenderer {
                     } else if let Some(ref mut renderer) = blockquote_renderer {
                         renderer.handle_text(&text, &mut context);
                     } else {
-                        let rendered = self.render_text(&text, &context.formatting_stack);
+                        let rendered = format_text(&text, &context.formatting_stack, self.use_colors);
                         context.push_str(&rendered);
                     }
                 }
@@ -616,7 +233,7 @@ impl MarkdownRenderer {
                     // Skip HTML tags
                 }
                 Event::Code(code) => {
-                    let rendered = self.render_inline_code(&code);
+                    let rendered = format_inline_code(&code, self.use_colors);
                     context.push_str(&rendered);
                 }
                 Event::TaskListMarker(checked) => {
@@ -627,75 +244,6 @@ impl MarkdownRenderer {
         }
 
         context.into_output()
-    }
-
-    fn render_text(&self, text: &str, formatting_stack: &VecDeque<FormattingState>) -> String {
-        if !self.use_colors {
-            return text.to_string();
-        }
-
-        let mut result = text.to_string();
-
-        // Apply formatting in reverse order (innermost first)
-        for state in formatting_stack.iter().rev() {
-            result = match state {
-                FormattingState::Bold => result.bold().to_string(),
-                FormattingState::Italic => result.italic().to_string(),
-                FormattingState::Link => result.blue().underline().to_string(),
-            };
-        }
-
-        result
-    }
-
-    fn render_inline_code(&self, code: &str) -> String {
-        if !self.use_colors {
-            return code.to_string();
-        }
-
-        // Reverse video: invert colors to respect terminal theme
-        code.reversed().to_string()
-    }
-
-    fn format_heading(&self, text: &str, level: u32) -> String {
-        match level {
-            1 => {
-                // H1: Bold with decorative lines top and bottom
-                let border = "─".repeat(text.len() + 4);
-                let bold_text = if self.use_colors {
-                    text.bold().to_string()
-                } else {
-                    text.to_string()
-                };
-                format!("{}\n {} \n{}", border, bold_text, border)
-            }
-            2 => {
-                // H2: Bold with decorative lines on sides
-                let bold_text = if self.use_colors {
-                    text.bold().to_string()
-                } else {
-                    text.to_string()
-                };
-                format!("─── {} ───", bold_text)
-            }
-            3 => {
-                // H3: Bold with dashes on sides
-                let bold_text = if self.use_colors {
-                    text.bold().to_string()
-                } else {
-                    text.to_string()
-                };
-                format!("- {} -", bold_text)
-            }
-            _ => {
-                // H4+: Just bold
-                if self.use_colors {
-                    text.bold().to_string()
-                } else {
-                    text.to_string()
-                }
-            }
-        }
     }
 
     /// Public API for rendering tables (used in tests)
