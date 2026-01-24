@@ -1,5 +1,6 @@
 use clap::{Parser, Subcommand};
 use cmf::Document;
+use cmf::terminal_renderer::MarkdownRenderer;
 use std::fs;
 use std::process::ExitCode;
 
@@ -24,6 +25,11 @@ enum Commands {
         /// Path to the markdown file
         file: String,
     },
+    /// Render markdown to terminal with ANSI colors
+    Render {
+        /// Path to the markdown file
+        file: String,
+    },
     /// Convert to OpenAI Chat Completions format
     #[command(name = "to-openai-chat")]
     ToOpenaiChat {
@@ -44,6 +50,7 @@ fn main() -> ExitCode {
     match cli.command {
         Commands::Detect { file } => cmd_detect(&file),
         Commands::Check { file } => cmd_check(&file),
+        Commands::Render { file } => cmd_render(&file),
         Commands::ToOpenaiChat { file } => cmd_to_openai_chat(&file),
         Commands::ToOpenaiResponses { file } => cmd_to_openai_responses(&file),
     }
@@ -87,6 +94,18 @@ fn cmd_check(file: &str) -> ExitCode {
         }
         ExitCode::FAILURE
     }
+}
+
+fn cmd_render(file: &str) -> ExitCode {
+    let content = match read_file(file) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+
+    let renderer = MarkdownRenderer::new();
+    let rendered = renderer.render(&content);
+    print!("{}", rendered);
+    ExitCode::SUCCESS
 }
 
 fn cmd_to_openai_chat(file: &str) -> ExitCode {
