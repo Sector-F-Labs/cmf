@@ -25,3 +25,6 @@ check:
 
 clean:
 	cargo clean
+
+install:
+	cargo install --path .
